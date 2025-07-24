@@ -1,0 +1,10 @@
+@theme {
+  --color-primary: rgb(59 130 246);
+  --color-success: rgb(16 185 129);
+  --color-error: rgb(239 68 68);
+}
+
+@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
