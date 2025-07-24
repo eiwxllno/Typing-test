@@ -1,15 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import confetti from "canvas-confetti";
+import TimerDisplay from "./TimerDisplay";
 
-const sampleTexts = [
-  "The quick brown fox jumps over the lazy dog.",
-  "Programming is the art of telling another human what one wants the computer to do.",
-  "React is a JavaScript library for building user interfaces.",
-  "Tailwind CSS is a utility-first CSS framework for rapidly building custom designs.",
-  "The only way to learn a new programming language is by writing programs in it.",
-];
-
-const TypingTest = () => {
+const TypingTest = ({
+  sampleTexts,
+  darkMode,
+  timerMode,
+  timeLeft,
+  setTimeLeft,
+  setIsTestActive,
+}) => {
   const [text, setText] = useState("");
   const [input, setInput] = useState("");
   const [startTime, setStartTime] = useState(null);
@@ -18,123 +18,184 @@ const TypingTest = () => {
   const inputRef = useRef(null);
 
   // Generate random text
-  const generateNewText = useCallback(() => {
+  const generateNewText = () => {
     const randomIndex = Math.floor(Math.random() * sampleTexts.length);
     setText(sampleTexts[randomIndex]);
     setInput("");
     setStartTime(null);
     setIsCompleted(false);
     setStats({ wpm: 0, accuracy: 100 });
+    if (timerMode) setTimeLeft(60);
     inputRef.current?.focus();
-  }, []);
+  };
 
-  // Initialize with random text
+  // Initialize
   useEffect(() => {
     generateNewText();
-  }, [generateNewText]);
+  }, []);
+
+  // Timer effect
+  useEffect(() => {
+    let interval;
+    if (timerMode && timeLeft > 0 && startTime && !isCompleted) {
+      setIsTestActive(true);
+      interval = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            handleTestCompletion();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      clearInterval(interval);
+      setIsTestActive(false);
+    };
+  }, [timerMode, timeLeft, startTime, isCompleted]);
+
+  const handleTestCompletion = () => {
+    const endTime = Date.now();
+    const timeInMinutes = timerMode
+      ? (60 - timeLeft) / 60
+      : (endTime - startTime) / 60000;
+
+    const words = text.trim().split(/\s+/).length;
+    const wpm = Math.round(words / timeInMinutes);
+
+    let correctChars = 0;
+    for (let i = 0; i < text.length; i++) {
+      if (i < input.length && text[i] === input[i]) {
+        correctChars++;
+      }
+    }
+    const accuracy = Math.round((correctChars / text.length) * 100);
+
+    setStats({ wpm, accuracy });
+    setIsCompleted(true);
+
+    if (wpm > 40 && accuracy > 90) {
+      confetti({ particleCount: 100, spread: 70 });
+    }
+  };
 
   const handleInputChange = (e) => {
     const value = e.target.value;
     setInput(value);
 
-    // Start timer on first keystroke
     if (!startTime && value.length === 1) {
       setStartTime(Date.now());
     }
 
-    // Check for completion
     if (value === text) {
-      const endTime = Date.now();
-      const timeInMinutes = (endTime - startTime) / 60000;
-      const words = text.trim().split(/\s+/).length;
-      const wpm = Math.round(words / timeInMinutes);
-
-      // Calculate accuracy
-      let correctChars = 0;
-      for (let i = 0; i < text.length; i++) {
-        if (i < value.length && text[i] === value[i]) {
-          correctChars++;
-        }
-      }
-      const accuracy = Math.round((correctChars / text.length) * 100);
-
-      setStats({ wpm, accuracy });
-      setIsCompleted(true);
-
-      // Celebration for good performance
-      if (wpm > 40 && accuracy > 90) {
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
-      }
+      handleTestCompletion();
     }
   };
 
   const getCharClass = (char, idx) => {
-    if (idx >= input.length) return "text-gray-700";
-    return char === input[idx] ? "text-success" : "text-error";
+    if (idx >= input.length)
+      return darkMode ? "text-gray-400" : "text-gray-700";
+    return char === input[idx]
+      ? "text-green-500 dark:text-green-400"
+      : "text-red-500 dark:text-red-400";
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-white rounded-xl shadow-lg p-6">
-        <h1 className="text-3xl font-bold text-center mb-6 text-primary">
-          Typing Speed Test
-        </h1>
+    <div
+      className={`max-w-3xl mx-auto p-6 rounded-xl ${
+        darkMode ? "bg-gray-800" : "bg-white shadow-md"
+      }`}
+    >
+      {timerMode && <TimerDisplay timeLeft={timeLeft} />}
 
-        <div className="mb-6">
-          <div className="text-lg font-medium mb-2">
-            Type the following text:
-          </div>
-          <div
-            className="bg-gray-50 p-4 rounded-lg mb-4 h-32 overflow-y-auto font-mono text-lg leading-relaxed"
-            onClick={() => inputRef.current?.focus()}
-          >
-            {text.split("").map((char, idx) => (
-              <span key={idx} className={getCharClass(char, idx)}>
-                {char}
-              </span>
-            ))}
-          </div>
-
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={handleInputChange}
-            className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary transition"
-            rows="4"
-            placeholder="Start typing here..."
-            disabled={isCompleted}
-            autoFocus
-          />
-        </div>
-
-        <div className="flex justify-between items-center mb-6">
-          <div className="text-center bg-gray-100 p-3 rounded-lg flex-1 mx-2">
-            <div className="text-sm text-gray-500">WPM</div>
-            <div className="text-2xl font-bold">{stats.wpm}</div>
-          </div>
-          <div className="text-center bg-gray-100 p-3 rounded-lg flex-1 mx-2">
-            <div className="text-sm text-gray-500">Accuracy</div>
-            <div className="text-2xl font-bold">{stats.accuracy}%</div>
-          </div>
-        </div>
-
-        <button
-          onClick={generateNewText}
-          className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-3 px-4 rounded-lg transition"
+      <div className="mb-6">
+        <div
+          className={`text-lg mb-2 ${
+            darkMode ? "text-gray-300" : "text-gray-700"
+          }`}
         >
-          {isCompleted ? "Try Another Text" : "Restart Test"}
-        </button>
+          Type the following:
+        </div>
+        <div
+          className={`p-4 mb-4 h-32 overflow-y-auto font-mono text-lg ${
+            darkMode ? "bg-gray-700" : "bg-gray-50"
+          }`}
+          onClick={() => inputRef.current?.focus()}
+        >
+          {text.split("").map((char, idx) => (
+            <span key={idx} className={getCharClass(char, idx)}>
+              {char}
+            </span>
+          ))}
+        </div>
 
-        {isCompleted && (
-          <div className="mt-4 p-3 bg-success/10 text-success text-center rounded-lg">
-            Test completed! {stats.wpm} WPM with {stats.accuracy}% accuracy.
-          </div>
-        )}
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={handleInputChange}
+          className={`w-full p-3 rounded-lg border ${
+            darkMode
+              ? "bg-gray-700 border-gray-600"
+              : "bg-white border-gray-300"
+          }`}
+          rows="4"
+          placeholder="Start typing here..."
+          disabled={isCompleted || (timerMode && timeLeft === 0)}
+          autoFocus
+        />
       </div>
+
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div
+          className={`p-3 rounded-lg text-center ${
+            darkMode ? "bg-gray-700" : "bg-gray-100"
+          }`}
+        >
+          <div className="text-sm text-gray-500">WPM</div>
+          <div className="text-2xl font-bold">{stats.wpm}</div>
+        </div>
+        <div
+          className={`p-3 rounded-lg text-center ${
+            darkMode ? "bg-gray-700" : "bg-gray-100"
+          }`}
+        >
+          <div className="text-sm text-gray-500">Accuracy</div>
+          <div className="text-2xl font-bold">{stats.accuracy}%</div>
+        </div>
+        <div
+          className={`p-3 rounded-lg text-center ${
+            darkMode ? "bg-gray-700" : "bg-gray-100"
+          }`}
+        >
+          <div className="text-sm text-gray-500">Chars</div>
+          <div className="text-2xl font-bold">{input.length}</div>
+        </div>
+      </div>
+
+      <button
+        onClick={generateNewText}
+        className={`w-full py-3 px-4 rounded-lg ${
+          darkMode
+            ? "bg-blue-600 hover:bg-blue-700"
+            : "bg-blue-500 hover:bg-blue-600"
+        } text-white`}
+      >
+        {isCompleted ? "Try Another Text" : "Restart Test"}
+      </button>
+
+      {isCompleted && (
+        <div
+          className={`mt-4 p-3 rounded-lg text-center ${
+            darkMode
+              ? "bg-green-900/30 text-green-400"
+              : "bg-green-100 text-green-700"
+          }`}
+        >
+          Completed! {stats.wpm} WPM, {stats.accuracy}% accuracy
+        </div>
+      )}
     </div>
   );
 };
